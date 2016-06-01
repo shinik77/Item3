@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import sys, time
+ 
 from string import letters, digits
 
 class CuteType:
@@ -199,6 +201,7 @@ class TokenType():
 NODETYPE_NAMES = dict((eval(attr, globals(), TokenType.__dict__), attr) for attr in dir(TokenType()) if not callable(attr) and not attr.startswith("__"))
 
 table = dict()
+global parameter
 
 class Node (object):
     def __init__(self, type, value=None):
@@ -321,7 +324,12 @@ class CuteInterpreter(object):
     def run_arith(self, arith_node):
         rhs1 = arith_node.next
         rhs2 = rhs1.next if rhs1.next is not None else None
-
+        if rhs1.type is TokenType.ID:
+            if self.lookupTable(rhs1.value) is not None:
+                rhs1 = self.lookupTable(rhs1.value)
+        if rhs2.type is TokenType.ID:
+            if self.lookupTable(rhs2.value) is not None:
+                rhs2 = self.lookupTable(rhs2.value)
         rhs1 = self.run_expr(rhs1)
         rhs2 = self.run_expr(rhs2)
         if rhs1 is None or rhs2 is None:
@@ -487,9 +495,15 @@ class CuteInterpreter(object):
         elif func_node.type is TokenType.COND:
             while True:
                 result = rhs1.value.next
-                condList = self.run_list(rhs1.value)
-                if condList.type is TokenType.TRUE:
-                    return result
+                if rhs1.value.type not in [TokenType.TRUE, TokenType.FALSE]:
+                    condList = self.run_list(rhs1.value)
+                else:
+                    condList = rhs1.value
+                if rhs1.type is TokenType.LIST:
+                    if condList.type is TokenType.TRUE:
+                        return self.run_expr(result)
+                    if rhs1.next is None:
+                        return self.run_list(result)
                 if rhs1.next is None:
                     break
                 else:
@@ -503,7 +517,35 @@ class CuteInterpreter(object):
                 rhs2 = self.run_expr(rhs2)
                 insertTable(rhs1.value, rhs2)
             return
+        elif func_node.type is TokenType.LAMBDA:
+            parm = rhs1
+            if parm.type is TokenType.LIST:
+                parm = parm.value
+            else:
+                return None
+            if parm.type is TokenType.ID:
+                parameter = parm.value
+                table[parameter] = table.get("parm")
+            else:
+                return None
+            if rhs2.type is TokenType.LIST:
+                return self.run_lambda(parameter, rhs2)
         else:
+            return None
+
+    def lookupTable(self, id):
+            """
+            :type id: String
+            :return:
+            """
+            temp = table[id]
+            if temp is not None:
+                if temp.type is TokenType.INT:
+                    return temp
+                elif temp.type is TokenType.QUOTE:
+                    return temp
+                elif temp.type is TokenType.LIST:
+                    return temp
             return None
 
     def run_expr(self, root_node):
@@ -514,7 +556,13 @@ class CuteInterpreter(object):
             return None
 
         if root_node.type is TokenType.ID:
-            return root_node
+            if (root_node.value in table) is False:
+                sys.stderr.write(root_node.value + "... Undefined;\ncannot reference an identifier before its definition\n")
+                return
+            if self.lookupTable(root_node.value) is not None:
+                return self.lookupTable(root_node.value)
+            else:
+                return root_node
         elif root_node.type is TokenType.INT:
             return root_node
         elif root_node.type is TokenType.TRUE:
@@ -633,9 +681,10 @@ def Test_method(input):
 
 def Test_All():
     x = True
-    while (x):
+    while(x):
+        time.sleep(0.5)
         a = raw_input("> ")
-        if a == "exit()":
-            x = False;
+        if(a == "( exit )"):
+            x = False
         Test_method(a)
 Test_All()
