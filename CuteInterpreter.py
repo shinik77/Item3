@@ -324,12 +324,26 @@ class CuteInterpreter(object):
     def run_arith(self, arith_node):
         rhs1 = arith_node.next
         rhs2 = rhs1.next if rhs1.next is not None else None
+        t1 = None
+        t2 = None
+        temp1 = rhs1
+        temp2 = rhs2
+        if temp1.type is TokenType.ID:
+            t1 = temp1.value
+        if temp2.type is TokenType.ID:
+            t2 = rhs2.value
+
         if rhs1.type is TokenType.ID:
+            t1 = temp1.value
             if self.lookupTable(rhs1.value) is not None:
-                rhs1 = self.lookupTable(rhs1.value)
+                temp1 = self.lookupTable(rhs1.value)
+                rhs1 = temp1
         if rhs2.type is TokenType.ID:
-            if self.lookupTable(rhs2.value) is not None:
-                rhs2 = self.lookupTable(rhs2.value)
+            t2 = rhs2.value
+            if self.lookupTable(temp2.value) is not None:
+                temp2 = self.lookupTable(rhs2.value)
+                rhs2 = temp2
+        self.removeParm("parm")
         rhs1 = self.run_expr(rhs1)
         rhs2 = self.run_expr(rhs2)
         if rhs1 is None or rhs2 is None:
@@ -380,9 +394,14 @@ class CuteInterpreter(object):
         else:
             return None
 
+    def removeParm(self, key):
+        if key in table is not False:
+            table.pop(key)
+
     def run_func(self, func_node):
         rhs1 = func_node.next
         rhs2 = rhs1.next if rhs1.next is not None else None
+        global parameter
 
         def create_quote_node(node, list_flag = False):
             """
@@ -514,8 +533,13 @@ class CuteInterpreter(object):
             elif rhs2.type is TokenType.QUOTE:
                 insertTable(rhs1.value, rhs2)
             elif rhs2.type is TokenType.LIST:
-                rhs2 = self.run_expr(rhs2)
-                insertTable(rhs1.value, rhs2)
+                if temp is func_node:
+                    if temp.type is TokenType.LAMBDA:
+                        rhs2 = self.run_expr(rhs2)
+                        insertTable(rhs1.value, rhs2)
+                else:
+                    rhs2 = self.run_expr(rhs2)
+                    insertTable(rhs1.value, rhs2)
             return
         elif func_node.type is TokenType.LAMBDA:
             parm = rhs1
@@ -532,6 +556,9 @@ class CuteInterpreter(object):
                 return self.run_lambda(parameter, rhs2)
         else:
             return None
+
+    def run_lambda(self, parameter, List):
+        return self.run_list(List)
 
     def lookupTable(self, id):
             """
