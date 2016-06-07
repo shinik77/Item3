@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-import sys, time
- 
+import sys, time, copy
 from string import letters, digits
 
 class CuteType:
@@ -73,7 +72,7 @@ CUTETYPE_NAMES=dict((eval(attr, globals(), CuteType.__dict__), attr) for attr in
 def is_type_binaryOp(token):
     """
     :type token:Token
-    :param token:
+    :parm token:
     :return:
     """
     if token.type in CuteType.BINARYOP_LIST:
@@ -201,8 +200,10 @@ class TokenType():
 NODETYPE_NAMES = dict((eval(attr, globals(), TokenType.__dict__), attr) for attr in dir(TokenType()) if not callable(attr) and not attr.startswith("__"))
 
 table = dict()
-global parameter
-
+parameter = None
+parm_temp = None
+temp11 = None
+count = 0
 class Node (object):
     def __init__(self, type, value=None):
         self.next  = None
@@ -343,6 +344,8 @@ class CuteInterpreter(object):
             if self.lookupTable(temp2.value) is not None:
                 temp2 = self.lookupTable(rhs2.value)
                 rhs2 = temp2
+        global temp11
+        temp11 = t1
         self.removeParm("parm")
         rhs1 = self.run_expr(rhs1)
         rhs2 = self.run_expr(rhs2)
@@ -402,6 +405,8 @@ class CuteInterpreter(object):
         rhs1 = func_node.next
         rhs2 = rhs1.next if rhs1.next is not None else None
         global parameter
+        #local = copy.deepcopy(rhs1)
+        #local2 = local.next if local.next is not None else None
 
         def create_quote_node(node, list_flag = False):
             """
@@ -528,11 +533,14 @@ class CuteInterpreter(object):
                 else:
                     rhs1 = rhs1.next
         elif func_node.type is TokenType.DEFINE:
+            global count
+            count =0
             if rhs2.type is TokenType.INT:
                 insertTable(rhs1.value, rhs2)
             elif rhs2.type is TokenType.QUOTE:
                 insertTable(rhs1.value, rhs2)
             elif rhs2.type is TokenType.LIST:
+                temp = rhs2.value
                 if temp is func_node:
                     if temp.type is TokenType.LAMBDA:
                         rhs2 = self.run_expr(rhs2)
@@ -542,18 +550,22 @@ class CuteInterpreter(object):
                     insertTable(rhs1.value, rhs2)
             return
         elif func_node.type is TokenType.LAMBDA:
-            parm = rhs1
-            if parm.type is TokenType.LIST:
-                parm = parm.value
+            global parm_temp
+
+            if rhs1.type is TokenType.LIST:
+                rhs1 = rhs1.value
             else:
                 return None
-            if parm.type is TokenType.ID:
-                parameter = parm.value
-                table[parameter] = table.get("parm")
+            if rhs1.type is TokenType.ID:
+                rhs1 = rhs1.value
+                if (rhs1 in table and count < 1) is True:
+                    parm_temp = table[rhs1]
+                    count = count +1
+                table[rhs1] = table.get("parm")
             else:
                 return None
             if rhs2.type is TokenType.LIST:
-                return self.run_lambda(parameter, rhs2)
+                return self.run_lambda(rhs1, rhs2)
         else:
             return None
 
@@ -561,19 +573,19 @@ class CuteInterpreter(object):
         return self.run_list(List)
 
     def lookupTable(self, id):
-            """
-            :type id: String
-            :return:
-            """
-            temp = table[id]
-            if temp is not None:
-                if temp.type is TokenType.INT:
-                    return temp
-                elif temp.type is TokenType.QUOTE:
-                    return temp
-                elif temp.type is TokenType.LIST:
-                    return temp
-            return None
+        """
+        :type id: String
+        :return:
+        """
+        temp = table[id]
+        if temp is not None:
+            if temp.type is TokenType.INT:
+                return temp
+            elif temp.type is TokenType.QUOTE:
+                return temp
+            elif temp.type is TokenType.LIST:
+                return temp
+        return None
 
     def run_expr(self, root_node):
         """
@@ -586,7 +598,7 @@ class CuteInterpreter(object):
             if (root_node.value in table) is False:
                 sys.stderr.write(root_node.value + "... Undefined;\ncannot reference an identifier before its definition\n")
                 return
-            if self.lookupTable(root_node.value) is not None:
+            if(self.lookupTable(root_node.value) is not None):
                 return self.lookupTable(root_node.value)
             else:
                 return root_node
@@ -600,21 +612,68 @@ class CuteInterpreter(object):
             return self.run_list(root_node)
         else:
             print "Run Expr Error"
+        #table[root_node] = parm_temp
+        #table[root_node] = parm_temp
         return None
 
     def run_list(self, l_node):
         """
         :type l_node:Node
         """
+        global parameter
+
         op_code = l_node.value
-        if op_code is None:
-            return l_node
-        if op_code.type in \
-                [TokenType.CAR, TokenType.CDR, TokenType.CONS, TokenType.ATOM_Q,\
-                 TokenType.EQ_Q, TokenType.NULL_Q, TokenType.NOT, TokenType.COND, TokenType.DEFINE]:
-            return self.run_func(op_code)
         if op_code.type is TokenType.QUOTE:
             return l_node
+        if op_code is None:
+            return l_node
+        temp = op_code
+        if temp.type is TokenType.ID:
+            if table.get(op_code.value) is not None:
+                temp = table.get(op_code.value)
+        if op_code.next is not None:
+            parameter = op_code.next
+        elif temp is not None:
+            return temp
+        else:
+            return l_node
+        if parameter.type is TokenType.ID:
+            if table.get(parameter.value) is not None:
+                parameter = table.get(parameter.value)
+        if op_code.type is TokenType.ID:
+            if table.get(op_code.value) is not None:
+                op_code = table.get(op_code.value)
+            if op_code.type is TokenType.LIST:
+                if parameter.type is TokenType.LIST:
+                    if parameter.type is TokenType.QUOTE:
+                        table["parm"] = parameter
+                    else:
+                        table["parm"] = self.run_list(parameter)
+                else:
+                    table["parm"] = parameter
+                return self.run_list(op_code)
+        if op_code.type is TokenType.LIST:
+            return self.run_list(op_code)
+        if op_code.type in \
+                [TokenType.CAR, TokenType.CDR, TokenType.CONS, TokenType.ATOM_Q,\
+                 TokenType.EQ_Q, TokenType.NULL_Q, TokenType.NOT, TokenType.COND, TokenType.DEFINE,\
+                 TokenType.LAMBDA]:
+            if op_code.type is TokenType.LAMBDA:
+                parameter = l_node.next
+                if parameter is not None:
+                    if parameter.type is TokenType.LIST:
+                        if parameter.type is TokenType.QUOTE:
+                            table["parm"] = parameter
+                        else:
+                            table["parm"] = self.run_expr(parameter)
+                    else:
+                        table["parm"] = parameter
+                elif parameter is None and table.get("parm") is None:
+                    return l_node
+                else:
+                    return self.run_func(op_code)
+
+            return self.run_func(op_code)
         if op_code.type in \
                 [TokenType.PLUS, TokenType.MINUS, TokenType.TIMES, TokenType.DIV, \
                  TokenType.GT, TokenType.LT, TokenType.EQ]:
@@ -633,6 +692,9 @@ def print_node(node):
     "입력은 List Node 또는 atom"
     :type node: Node
     """
+    global count
+    if (count == 1):
+        table[temp11] = parm_temp
     def print_list(node):
         """
         "List노드의 value에 대해서 출력"
